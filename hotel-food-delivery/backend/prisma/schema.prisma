@@ -1,0 +1,235 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["filterJson"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum Role {
+  USER
+  ADMIN
+  HOTEL_ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  MOBILE_MONEY
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+// Models
+model User {
+  id           Int       @id @default(autoincrement())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  fullName     String?   @map("full_name")
+  phone        String?
+  company      String?
+  officeAddress String?  @map("office_address")
+  avatar       String?
+  role         Role      @default(USER)
+  
+  // Relations
+  orders       Order[]
+  addresses    Address[]
+  
+  // Timestamps
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  lastLogin    DateTime? @map("last_login")
+  
+  @@map("users")
+}
+
+model Hotel {
+  id             Int        @id @default(autoincrement())
+  name           String
+  address        String
+  city           String
+  latitude       Float?
+  longitude      Float?
+  phone          String?
+  email          String?
+  description    String?
+  cuisineType    String?    @map("cuisine_type")
+  openingHours   Json?      @map("opening_hours") // {monday: "9am-10pm", ...}
+  deliveryFee    Float      @default(2.99) @map("delivery_fee")
+  minOrderAmount Float      @default(10.00) @map("min_order_amount")
+  rating         Float      @default(0.0)
+  totalReviews   Int        @default(0) @map("total_reviews")
+  isActive       Boolean    @default(true) @map("is_active")
+  deliveryRadius Int        @default(3000) @map("delivery_radius") // meters
+  coverImage     String?    @map("cover_image")
+  logo           String?
+  
+  // Relations
+  menuItems      MenuItem[]
+  orders         Order[]
+  hotelAdmins    HotelAdmin[]
+  reviews        Review[]
+  
+  // Timestamps
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+  
+  @@map("hotels")
+}
+
+model MenuItem {
+  id          Int       @id @default(autoincrement())
+  hotelId     Int       @map("hotel_id")
+  name        String
+  description String?
+  price       Float
+  category    String    // appetizer, main, dessert, drink, side
+  dietaryTags String[]  @map("dietary_tags") // vegetarian, vegan, gluten-free, spicy
+  isAvailable Boolean   @default(true) @map("is_available")
+  imageUrl    String?   @map("image_url")
+  position    Int       @default(0) // for sorting
+  
+  // Relations
+  hotel       Hotel     @relation(fields: [hotelId], references: [id])
+  orderItems  OrderItem[]
+  
+  // Timestamps
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  @@map("menu_items")
+}
+
+model Order {
+  id                  Int         @id @default(autoincrement())
+  orderNumber         String      @unique @map("order_number")
+  userId              Int         @map("user_id")
+  hotelId             Int         @map("hotel_id")
+  totalAmount         Float       @map("total_amount")
+  deliveryAddress     String      @map("delivery_address")
+  deliveryTime        DateTime?   @map("delivery_time")
+  status              OrderStatus @default(PENDING)
+  paymentMethod       PaymentMethod @default(CASH) @map("payment_method")
+  paymentStatus       PaymentStatus @default(PENDING) @map("payment_status")
+  specialInstructions String?     @map("special_instructions")
+  deliveryNotes       String?     @map("delivery_notes")
+  
+  // Relations
+  user                User        @relation(fields: [userId], references: [id])
+  hotel               Hotel       @relation(fields: [hotelId], references: [id])
+  orderItems          OrderItem[]
+  
+  // Timestamps
+  createdAt           DateTime    @default(now()) @map("created_at")
+  updatedAt           DateTime    @updatedAt @map("updated_at")
+  
+  @@map("orders")
+}
+
+model OrderItem {
+  id         Int     @id @default(autoincrement())
+  orderId    Int     @map("order_id")
+  menuItemId Int     @map("menu_item_id")
+  quantity   Int
+  unitPrice  Float   @map("unit_price")
+  subtotal   Float   @default(0)
+  
+  // Relations
+  order      Order   @relation(fields: [orderId], references: [id])
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  
+  @@map("order_items")
+}
+
+model HotelAdmin {
+  id        Int      @id @default(autoincrement())
+  hotelId   Int      @map("hotel_id")
+  email     String   @unique
+  passwordHash String @map("password_hash")
+  name      String?
+  phone     String?
+  
+  // Relations
+  hotel     Hotel    @relation(fields: [hotelId], references: [id])
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  @@map("hotel_admins")
+}
+
+model Address {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  label     String   // Home, Office, etc.
+  address   String
+  city      String
+  latitude  Float?
+  longitude Float?
+  isDefault Boolean  @default(false) @map("is_default")
+  
+  // Relations
+  user      User     @relation(fields: [userId], references: [id])
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  @@map("addresses")
+}
+
+model Review {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  hotelId     Int      @map("hotel_id")
+  orderId     Int      @map("order_id")
+  rating      Int      // 1-5
+  comment     String?
+  images      String[] // URLs of review images
+  
+  // Relations
+  user        User     @relation(fields: [userId], references: [id])
+  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+  order       Order    @relation(fields: [orderId], references: [id])
+  
+  // Timestamps
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  @@map("reviews")
+}
+
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  isRevoked Boolean  @default(false) @map("is_revoked")
+  
+  // Relations
+  user      User     @relation(fields: [userId], references: [id])
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  @@map("refresh_tokens")
+}
